@@ -1,0 +1,1 @@
+FX-Package -name GRAI-96-Decoder -maintainer G.Crean -description "Sample application to decode GRAI-96"

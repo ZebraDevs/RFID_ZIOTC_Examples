@@ -1,0 +1,1 @@
+FX-Package -name GPI-Message -maintainer G.Crean -description "Sample application to send a message on GPI change"
