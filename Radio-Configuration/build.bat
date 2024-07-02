@@ -1,1 +1,1 @@
-FX-Package -name Radio-Configuration -maintainer G.Crean -description "Sample application to configure the system"
+..\Build-Utils\FX-Package -name Radio-Configuration -maintainer G.Crean -description "Sample application to configure the system"

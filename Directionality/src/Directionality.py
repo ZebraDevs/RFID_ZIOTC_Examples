@@ -15,7 +15,7 @@ from INIFile import INIFile
 if os.environ.get('INI_LOCATION') is not None:
     Ini = INIFile(os.getenv('INI_LOCATION'))
 else:
-    Ini = INIFile("/apps/config.ini")
+    Ini = INIFile("config.ini")
 
 # Global Config Parameters
 DEBUG_SERVER = Ini.getStr("General", "DebugServer", "")

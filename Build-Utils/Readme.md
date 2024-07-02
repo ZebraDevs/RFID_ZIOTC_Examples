@@ -13,10 +13,21 @@ Fx-Package is a cross-platform application to build debian packages for IoT conn
 
 ## Folder Structure
 
-- Application
-  - src ( Contains the Python source files)
-  - pkg ( Contains any other files, ie. config files)
-  - out ( Destination folder for the .deb file)
+```
+Application
+├── src  ( Contains the Application source files)
+├── pkg  ( Contains any other files, ie. config files)
+└── out  ( Destination folder for the .deb file)
+```
+
+- Writable File Suffix
+  - ini
+  - yml
+  - yaml
+  - xml
+  - txt
+  - json
 
 
-  
+- Main Application File  
+Either a **[Name].js** or **[Name].py** file must exist in the src folder.
