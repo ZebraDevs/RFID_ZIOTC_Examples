@@ -1,4 +1,3 @@
-import syslog
 import socket
 import time
 import logging
@@ -23,7 +22,6 @@ class Logger:
             logging.basicConfig(handlers=[RotatingFileHandler('./IOT_Connector.log', maxBytes=2000000, backupCount=10)], level=self.log_level, format="[%(asctime)s.%(msecs)03d] %(levelname)s %(message)s", datefmt='%Y-%m-%dT%H:%M:%S')
             self.logger = logging.getLogger()
             print("Opening syslog...")
-            syslog.openlog("IOT_Connector")
 
     # ************************************************************************
     # Send debug Log Message
@@ -78,5 +76,4 @@ class Logger:
             pass
 
         if not self.console_only:
-            syslog.syslog(level, message)
             self.logger.log(logging_level, message)

@@ -16,13 +16,15 @@ class RestAPI:
         self.logger = logger
         self.retry_count = retry_count
         self.ziotcObject = ziotc
+        self.GPOState = [ None, None, None, None, None, None, None, None, None ]
         self.__get_jwt()
 
     # ************************************************************************
     # Get Auth Token
     # ************************************************************************
     def __get_jwt(self):
-        self.conn = http.client.HTTPConnection("127.0.0.1")
+        self.ssl_context = ssl._create_unverified_context()
+        self.conn = http.client.HTTPSConnection("127.0.0.1", context=self.ssl_context)
 
     # ************************************************************************
     # Perform Request
@@ -43,10 +45,11 @@ class RestAPI:
     # Start Inventory Scan
     # ************************************************************************
     def startInventory(self):
-        retry = 0;
+        retry = 0
+        payload = "{ \"doNotPersistState\": true }"
         while retry < self.retry_count:
             headers = { }
-            status, data = self.__makeRequest("PUT", "/cloud/start", "", headers)
+            status, data = self.__makeRequest("PUT", "/cloud/start", payload, headers)
             if status == 200:
                 self.logger.info("Inventory Started")
                 self.invState = True
@@ -59,7 +62,7 @@ class RestAPI:
     # Stop Invertory Scan
     # ************************************************************************
     def stopInventory(self):
-        retry = 0;
+        retry = 0
         while retry < self.retry_count:
             headers = {}
             status, data = self.__makeRequest("PUT", "/cloud/stop", "", headers)
@@ -75,19 +78,28 @@ class RestAPI:
     # Set General Purpose output State
     # ************************************************************************
     def setFastGPO(self, port, state):
+        if self.GPOState[port] == state:
+            return 
+
         var = {"type":"GPO","pin":port,"state": "HIGH" if state else "LOW" }
         self.ziotcObject.send_next_msg(pyziotc.MSG_OUT_GPO, bytearray(json.dumps(var).encode('utf-8')))
+        self.GPOState[port] = state
+        self.logger.info("Set GPO " + str(port) + " -> " + var["state"])
 
     # ************************************************************************
     # Set General Purpose output State using local rest API
     # ************************************************************************
     def setGPO(self, port, state):
+        if self.GPOState[port] == state:
+            return
+
         payload = json.dumps({'port': port, 'state': state})
         retry = 0;
         while retry < self.retry_count:
             headers = {'Content-Type': 'application/json'}
             status, data = self.__makeRequest("PUT", "/cloud/gpo", payload, headers)
             if status == 200:
+                self.GPOState[port] = state  
                 return
             self.__get_jwt()
             retry = retry + 1
@@ -98,9 +110,9 @@ class RestAPI:
     # Set configuration
     # ************************************************************************
     def setConfig(self, payload):
-        retry = 0;
+        retry = 0
         while retry < self.retry_count:
-            headers = {}
+            headers = {'Content-Type': 'application/json'}
             status, data = self.__makeRequest("PUT", "/cloud/config", payload, headers)
             if status == 200:
                 return
@@ -112,9 +124,9 @@ class RestAPI:
     # Set Operation Mode
     # ************************************************************************
     def setMode(self, payload):
-        retry = 0;
+        retry = 0
         while retry < self.retry_count:
-            headers = {}
+            headers = {'Content-Type': 'application/json'}
             status, data = self.__makeRequest("PUT", "/cloud/mode", payload, headers)
             if status == 200:
                 return
@@ -126,9 +138,9 @@ class RestAPI:
     # Get the reader version
     # ************************************************************************
     def getReaderVersion(self):
-        retry = 0;
+        retry = 0
         while retry < self.retry_count:
-            headers = {}
+            headers = {'Content-Type': 'application/json'}
             status, data = self.__makeRequest("GET", "/cloud/version", "", headers)
             if status != 200:
                 self.logger.err("Unable to retrieve reader version :" + str(status) + " -> " + data.decode("utf-8"))
@@ -142,9 +154,9 @@ class RestAPI:
     # Get the reader serial number
     # ************************************************************************
     def getReaderSerial(self):
-        retry = 0;
+        retry = 0
         while retry < self.retry_count:
-            headers = {}
+            headers = {'Content-Type': 'application/json'}
             status, data = self.__makeRequest("GET", "/cloud/version", "", headers)
             if status != 200:
                 self.logger.err("Unable to retrieve reader serial :" + str(status) + " -> " + data.decode("utf-8"))
@@ -158,11 +170,11 @@ class RestAPI:
     # Set Data Analytics Mode
     # ************************************************************************
     def setPassththrough(self):
-        retry = 0;
+        retry = 0
         payload = json.dumps({"component": "RC", "payload": "data_analytics STRING"})
 
         while retry < self.retry_count:
-            headers = {}
+            headers = {'Content-Type': 'application/json'}
             status, data = self.__makeRequest("PUT", "/cloud/pass-through", payload, headers)
             if status == 200:
                 return
