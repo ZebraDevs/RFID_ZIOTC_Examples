@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATR-Viewer</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #c8c8c8;
+            overflow: hidden;
+        }
+        #canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let beams=[];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Initilise Operation Mode and start reading
+        function initMode() {
+            let mode = `{
+                "antennas": [
+                    301,
+                    303,
+                    305,
+                    307,
+                    309,
+                    311,
+                    313,
+                    315,
+                    317,
+                    319,
+                    321,
+                    323,
+                    326,
+                    328,
+                    330,
+                    332,
+                    334,
+                    336,
+                    338,
+                    340,
+                    342,
+                    344,
+                    346,
+                    348,
+                    349,
+                    351,
+                    353,
+                    355,
+                    357,
+                    359,
+                    361,
+                    363,
+                    365,
+                    367,
+                    369,
+                    371,
+                    374,
+                    376,
+                    378,
+                    380,
+                    382,
+                    384,
+                    386,
+                    388,
+                    390,
+                    392,
+                    394,
+                    396,
+                    397
+                ],
+                    "query": {
+                        "sel": "ALL",
+                        "session": "S3",
+                        "tagpopulation": 10,
+                        "target": "B"
+                    },
+                    "reportFilter": {
+                        "duration": 0,
+                        "type": "PER_ANTENNA"
+                    },
+                    "selects": [
+                        {
+                            "action": "INVB_INVA",
+                            "length": 96,
+                            "mask": "BBBB00000000000000000001",
+                            "membank": "EPC",
+                            "pointer": 32,
+                            "target": "S3"
+                        }
+                    ],
+                    "tagMetaData": [
+                        "ANTENNA",
+                        "RSSI",
+                        "SEEN_COUNT"
+                    ],
+                    "transmitPower": 26,
+                    "antennaStopCondition": {
+                        "type":"DURATION",
+                        "value": 25
+                    },
+                    "type": "CUSTOM"
+            }`
+
+            var xmlHttp = new XMLHttpRequest();
+
+            //Send Stop request
+            xmlHttp.open("PUT","/cloud/stop",false)
+            xmlHttp.setRequestHeader('Content-Type',"text/json")
+            xmlHttp.send('')
+
+            // Set Operation Mode
+            xmlHttp.open("PUT","/cloud/mode",false)
+            xmlHttp.setRequestHeader('Content-Type',"text/json")
+            xmlHttp.send(mode)
+
+            //Send Start Request
+            xmlHttp.open("PUT","/cloud/start",false)
+            xmlHttp.setRequestHeader('Content-Type',"text/json")
+            xmlHttp.send('{"doNotPersistState":true}')
+        }
+ 
+        // Draw to the canvas
+        function draw() {
+
+            ctx.fillStyle = "rgb(200,200,200)"
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            ctx.beginPath()
+            ctx.arc(centerX, centerY, 400, 0, 2* Math.PI)
+            ctx.stroke()
+
+            ctx.beginPath()
+            ctx.arc(centerX, centerY, 300, 0, 2* Math.PI)
+            ctx.stroke()
+
+            ctx.beginPath()
+            ctx.arc(centerX, centerY, 200, 0, 2* Math.PI)
+            ctx.stroke()
+
+            ctx.beginPath()
+            ctx.arc(centerX, centerY, 100, 0, 2* Math.PI)
+            ctx.stroke()
+
+            for(let angle = 0;angle < 360;angle += 15) {
+                drawAzimuth(ctx, angle, centerX, centerY, 400)
+            }
+
+            for (let i = 301; i <= 397; i++) {
+                let data = getBeamInfo(i)
+                drawBeam(ctx, data.azimuth, centerX, centerY, elevationToPx(data.elevation), i)
+            }
+
+            // Fraw update rate is 25 FPS
+            setTimeout(() => { requestAnimationFrame(draw); },1000/25);            
+        }
+
+        function drawAzimuth(ctx, angle, x, y, r) {
+            ctx.beginPath()
+            ctx.moveTo(x,y)
+            ctx.lineTo(x + sin(angle)*r, y - cos(angle)*r)
+            ctx.stroke()
+        }
+
+        function getBeamInfo(beam) {
+            let normalizedBeam = beam
+            normalizedBeam -= parseInt(beam/100) * 100
+            let row = parseInt((normalizedBeam-1)/24)
+            let column = (normalizedBeam - 1) % 24
+            let elevation = 60 - (row * 15)
+            let azimuth =  column * 15
+            return {elevation: elevation, azimuth: azimuth}
+        }
+
+        function drawBeam(ctx, angle, x, y, r, beam) {
+            let beamX = x + sin(angle)*r
+            let beamY = y - cos(angle)*r
+        
+            ctx.beginPath()
+            ctx.arc(beamX, beamY, 5, 0, 2 * Math.PI)
+            ctx.fillStyle = 'white'
+            if (beams[beam] != 0) {
+                ctx.fillStyle = 'rgba(255,0,0,1)'
+                beams[beam]--;
+            }
+            ctx.fill()
+        
+            ctx.font = "700 14px serif"
+            ctx.fillStyle = "black"
+            ctx.fillText(beam, beamX + 5, beamY - 5)
+        }
+
+        function sin(angle) {
+            return Math.sin(angle * (Math.PI / 180))
+        }
+
+        function cos(angle) {
+            return Math.cos(angle * (Math.PI / 180))
+        }
+
+        function elevationToPx(elevation) {
+            return elevation/.15
+        }
+
+        // Initilise the beams
+        function initBeams() {
+            for (let i = 301; i <= 397; i++) {
+                beams[i] = 0;
+            }
+            checkWSConnection()
+            setInterval(() => {
+                checkWSConnection()
+            },10000)
+        }
+
+        // Websocket connection
+        let ws
+        function checkWSConnection() {
+            if (ws && ws.readyState === WebSocket.OPEN) return
+            
+            ws = new WebSocket('ws://' + location.host + '/ws')
+            
+            ws.onopen = (evt) => {
+                console.log('Websocket opened...')
+            }
+        
+            ws.onmessage = (evt) => {
+                text = evt.data.toString()
+                try {
+                    handleRead(parsePotentiallyConcatenatedJson(text))
+                }
+                catch (err) {
+                    console.log('Error parsing reads: ' + err);
+                }
+            }
+            
+            ws.onerror = (err) => {
+                console.log('Websocket error: ' + err)
+            }
+
+            ws.onclose = (evt) => {
+                console.log('Websocket closed')
+            } 
+        }
+
+        // Handle the websocket data
+        function handleRead(data) {
+            if (data && data.length) {
+                for (let tag of data) {
+                    // 25 FPS * 5 = 5 Seconds
+                    beams[tag.data.antenna] = 25 * 5
+                }
+            }
+        }     
+
+        // Handle broken JSON Strings
+        function parsePotentiallyConcatenatedJson(jsonString) {
+            const results = [];
+            let remainingString = jsonString.trim(); // Start with trimmed string
+
+            while (remainingString.length > 0) {
+                let parsedSuccessfully = false;
+                let firstChar = remainingString[0];
+
+                if (firstChar !== '{' && firstChar !== '[') {
+                    throw new Error(`Invalid JSON sequence: Remaining string does not start with '{' or '[' at: "${remainingString.substring(0, 30)}..."`);
+                }
+
+                // Iterate through possible end points of the first JSON structure
+                for (let i = 1; i <= remainingString.length; i++) {
+                    const subString = remainingString.substring(0, i);
+                    try {
+                        // Attempt to parse the substring
+                        const result = JSON.parse(subString);
+                        results.push(result); // Add the successfully parsed object/array
+                        remainingString = remainingString.substring(i).trim();
+                        parsedSuccessfully = true;
+                        break; // Exit the inner loop and start parsing the rest
+                    } catch (e) {
+                        if (i === remainingString.length) {
+                            throw new Error(`Invalid JSON: Could not parse remaining string starting at: "${remainingString.substring(0, 30)}..."`);
+                        }
+                    }
+                }
+            }
+            return results; // Return array of parsed objects/arrays
+        }
+
+        initMode();
+        initBeams()
+        draw();
+    </script>
+</body>
+</html>
