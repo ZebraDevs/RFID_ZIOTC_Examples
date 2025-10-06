@@ -1,4 +1,4 @@
-# ATR-Viewer
+# RFID-Monitor
 
 This debian package can be loaded onto the reader to demonstrate antenna reads 
 
