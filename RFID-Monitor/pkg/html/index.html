@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFID Antenna Monitor</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel to transpile JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #888;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #555;
+        }
+        canvas {
+            border-radius: 0.5rem; /* Matches rounded-lg from parent */
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+<script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // SignalStrengthIcon component
+    const SignalStrengthIcon = ({ rssi }) => {
+      let bars = 0;
+      if (rssi > -50) bars = 4;
+      else if (rssi > -60) bars = 3;
+      else if (rssi > -70) bars = 2;
+      else if (rssi > -85) bars = 1;
+      const Bar = ({ active }) => (
+        <div className={`h-full w-1.5 rounded-sm mr-0.5 ${active ? 'bg-green-500' : 'bg-gray-300'}`} />
+      );
+      return (
+        <div className="flex items-end h-4 w-6">
+          <div className="h-1/4 w-1.5 mr-0.5"><Bar active={bars >= 1} /></div>
+          <div className="h-2/4 w-1.5 mr-0.5"><Bar active={bars >= 2} /></div>
+          <div className="h-3/4 w-1.5 mr-0.5"><Bar active={bars >= 3} /></div>
+          <div className="h-full w-1.5"><Bar active={bars >= 4} /></div>
+        </div>
+      );
+    };
+
+    // AntennaCard component displays data for a single antenna
+    const AntennaCard = ({ antennaNum, tagsData, graphData, filterEPC, globalMaxReads, readHistory }) => {
+      const canvasRef = useRef(null);
+      const filteredTags = Array.from(tagsData.values()).filter(tag => filterEPC ? tag.epc.toLowerCase().includes(filterEPC.toLowerCase()) : true);
+      const sortedTags = filteredTags.sort((a, b) => b.count - a.count);
+      const maxCount = sortedTags.length > 0 ? sortedTags[0].count : 0;
+      const minCount = sortedTags.length > 0 ? sortedTags[sortedTags.length - 1].count : 0;
+      const getBackgroundColor = useCallback((count) => {
+        if (maxCount === minCount) return 'bg-red-100';
+        const normalizedCount = (count - minCount) / (maxCount - minCount);
+        const redIntensity = Math.floor(normalizedCount * 6) * 100 + 100;
+        return `bg-red-${redIntensity > 900 ? 900 : redIntensity}`;
+      }, [maxCount, minCount]);
+      const calculateRollingRssi = (epc) => {
+        const fiveSecondsAgo = Date.now() - 5000;
+        const recentReads = readHistory.filter(r => r.timestamp > fiveSecondsAgo && r.epc === epc);
+        if (recentReads.length === 0) return null;
+        const totalRssiWeight = recentReads.reduce((sum, read) => sum + (read.rssi * read.count), 0);
+        const totalReadsInWindow = recentReads.reduce((sum, read) => sum + read.count, 0);
+        if (totalReadsInWindow === 0) return null;
+        return Math.round(totalRssiWeight / totalReadsInWindow);
+      };
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const { width, height } = canvas;
+        ctx.clearRect(0, 0, width, height);
+        ctx.strokeStyle = '#e5e7eb';
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i < height; i += height / 5) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(width, i); ctx.stroke(); }
+        for (let i = 0; i < width; i += width / 9) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, height); ctx.stroke(); }
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (graphData.length > 0) {
+          graphData.forEach((dataPoint, index) => {
+            const x = (index / (30 - 1)) * width;
+            const y = height - (dataPoint / (globalMaxReads || 1)) * height;
+            if (index === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        }
+      }, [graphData, globalMaxReads]);
+      return (
+        <div className="flex-shrink-0 w-[31rem] bg-white rounded-xl shadow-lg border border-gray-200 p-4 flex flex-col font-inter">
+          <div className="flex justify-between items-baseline">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">Antenna {antennaNum}</h3>
+            <span className="text-xs text-gray-400">Scale: {globalMaxReads}</span>
+          </div>
+          <div className="mb-4">
+            <h4 className="text-md font-medium text-gray-700 mb-2">Rolling 5s Read Count (30s)</h4>
+            <div className="relative w-full h-32 bg-gray-50 rounded-lg overflow-hidden border border-gray-300">
+              <canvas ref={canvasRef} width="464" height="128" className="w-full h-full"></canvas>
+            </div>
+          </div>
+          <div className="flex-grow overflow-y-auto max-h-80 custom-scrollbar rounded-lg border border-gray-300">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-100 sticky top-0">
+                <tr>
+                  <th className="w-px px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tl-lg">Total Reads</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">EPC</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tr-lg">RSSI (Last 5s)</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {sortedTags.length > 0 ? (
+                  sortedTags.map((tag) => {
+                    const rollingRssi = calculateRollingRssi(tag.epc);
+                    return (
+                      <tr key={tag.epc} className={getBackgroundColor(tag.count)}>
+                        <td className="w-px pl-4 pr-1 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{tag.count}</td>
+                        <td title={tag.epc} className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 font-mono">{tag.epc}</td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700">
+                          <div className="flex items-center">
+                            <SignalStrengthIcon rssi={rollingRssi} />
+                            <span className="ml-2 text-xs">{rollingRssi !== null ? `${rollingRssi} dBm` : '-'}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr><td colSpan="3" className="px-4 py-4 text-center text-sm text-gray-500">No tags detected yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
+    // Main App component
+    const App = () => {
+      const [antennaData, setAntennaData] = useState(() => {
+        const initialData = {};
+        for (let i = 1; i <= 8; i++) {
+          initialData[i] = { tags: new Map(), graph: Array(30).fill(0), readHistory: [] };
+        }
+        return initialData;
+      });
+      const [filterEPC, setFilterEPC] = useState('');
+      const [currentFilterInput, setCurrentFilterInput] = useState('');
+      const [wsUrl, setWsUrl] = useState('wss://' + location.host + '/ws'); //change this to start with nothing & show a hint
+      const [newWsUrlInput, setNewWsUrlInput] = useState(wsUrl);
+      const [wsStatus, setWsStatus] = useState('Connecting');
+      const ws = useRef(null);
+
+      const reconnectTimeoutId = useRef(null);
+
+      const processPayload = useCallback((payload) => {
+        if (!payload.data) return;
+        setAntennaData(prevData => {
+          const { antenna, idHex: epc, peakRssi, reads } = payload.data;
+          const currentAntennaState = prevData[antenna];
+          if (!currentAntennaState) return prevData;
+          const newTags = new Map(currentAntennaState.tags);
+          const existingTag = newTags.get(epc);
+          if (existingTag) {
+            newTags.set(epc, { ...existingTag, count: existingTag.count + reads });
+          } else {
+            newTags.set(epc, { epc, count: reads });
+          }
+          const newReadHistory = [...currentAntennaState.readHistory, { timestamp: Date.now(), epc, count: reads, rssi: peakRssi }];
+          return { ...prevData, [antenna]: { ...currentAntennaState, tags: newTags, readHistory: newReadHistory } };
+        });
+      }, []);
+
+      function parsePotentiallyConcatenatedJson(jsonString) {
+        const results = [];
+        let remainingString = jsonString.trim();
+        while (remainingString.length > 0) {
+          let parsedSuccessfully = false;
+          let firstChar = remainingString[0];
+          if (firstChar !== '{' && firstChar !== '[') throw new Error(`Invalid JSON...`);
+          for (let i = 1; i <= remainingString.length; i++) {
+            const subString = remainingString.substring(0, i);
+            try {
+              const result = JSON.parse(subString);
+              results.push(result);
+              remainingString = remainingString.substring(i).trim();
+              parsedSuccessfully = true;
+              break;
+            } catch (e) {
+              if (i === remainingString.length) throw new Error(`Invalid JSON...`);
+            }
+          }
+        }
+        return results;
+      }
+
+      // WebSocket useEffect
+      useEffect(() => {
+        const connect = () => {
+            if (!wsUrl || wsUrl.trim() === '') {
+                setWsStatus('Idle');
+                return;
+            };
+
+            ws.current = new WebSocket(wsUrl);
+            setWsStatus('Connecting');
+
+            ws.current.onopen = () => {
+                setWsStatus('Connected');
+            };
+
+            ws.current.onmessage = (event) => {
+	      var text = event.data.toString()
+              const parsedData = parsePotentiallyConcatenatedJson(text);
+              parsedData.forEach(payload => processPayload(payload));
+            };
+
+            ws.current.onclose = () => {
+                setWsStatus('Disconnected');
+                // Store the new timeout ID in the ref
+                reconnectTimeoutId.current = setTimeout(connect, 3000);
+            };
+
+            ws.current.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                // The onclose event will fire automatically after an error.
+            };
+        };
+
+        connect();
+
+        // The cleanup function
+        return () => {
+            // When the component unmounts or wsUrl changes,
+            // clear any scheduled reconnect to prevent it from firing.
+            if (reconnectTimeoutId.current) {
+                clearTimeout(reconnectTimeoutId.current);
+            }
+
+            // Also, properly close the WebSocket connection.
+            if (ws.current) {
+                // We set onclose to null to prevent the reconnect logic
+                // from firing when we are intentionally closing the connection.
+                ws.current.onclose = null;
+                ws.current.close();
+            }
+        };
+      }, [wsUrl, processPayload]);
+
+      useEffect(() => {
+        const updateGraphData = () => {
+          setAntennaData(prevData => {
+            const now = Date.now();
+            const fiveSecondsAgo = now - 5000;
+            const historyLimit = now - 35000;
+            const newAntennaData = { ...prevData };
+            for (let i = 1; i <= 8; i++) {
+                const antennaId = i.toString();
+                const currentAntennaState = prevData[antennaId];
+                if (!currentAntennaState) continue;
+                const newReadHistory = currentAntennaState.readHistory.filter(read => read.timestamp > historyLimit);
+                let readsInLast5Seconds = newReadHistory.filter(read => read.timestamp >= fiveSecondsAgo);
+                if (filterEPC) {
+                    readsInLast5Seconds = readsInLast5Seconds.filter(read => read.epc.toLowerCase().includes(filterEPC.toLowerCase()));
+                }
+                const totalReads = readsInLast5Seconds.reduce((sum, read) => sum + read.count, 0);
+                const newGraph = [...currentAntennaState.graph, totalReads];
+                if (newGraph.length > 30) newGraph.shift();
+                newAntennaData[antennaId] = { ...currentAntennaState, graph: newGraph, readHistory: newReadHistory };
+            }
+            return newAntennaData;
+          });
+        };
+        const intervalId = setInterval(updateGraphData, 1000);
+        return () => clearInterval(intervalId);
+      }, [filterEPC]);
+
+      const handleSetFilter = () => setFilterEPC(currentFilterInput);
+      const handleClearFilter = () => { setFilterEPC(''); setCurrentFilterInput(''); };
+      const handleClearAllData = () => {
+        setAntennaData(() => {
+          const initialData = {};
+          for (let i = 1; i <= 8; i++) {
+            initialData[i] = { tags: new Map(), graph: Array(30).fill(0), readHistory: [] };
+          }
+          return initialData;
+        });
+      };
+      const handleWsUrlUpdate = () => {
+        // Clear all existing data from the UI when switching sources
+        handleClearAllData();
+        // Set the new URL, which will trigger the useEffect to reconnect
+        setWsUrl(newWsUrlInput)
+      };
+      const getStatusColor = () => {
+          switch(wsStatus) {
+              case 'Connected': return 'bg-green-500';
+              case 'Disconnected': return 'bg-red-500';
+              case 'Idle': return 'bg-gray-400';
+              default: return 'bg-yellow-500';
+          }
+      };
+      const globalMaxReads = Math.max(1, ...Object.values(antennaData).flatMap(data => data.graph));
+
+      return (
+        <div className="min-h-screen bg-gray-100 p-4 sm:p-6 flex flex-col items-center">
+          <div className="bg-white p-4 rounded-xl shadow-lg mb-6 w-full max-w-7xl border border-gray-200">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex flex-col gap-2 flex-grow">
+                <label htmlFor="epc-filter" className="text-sm font-medium text-gray-700">Filter by EPC</label>
+                <div className="flex items-center gap-2">
+                   <div className="relative">
+                     <input id="epc-filter" type="text" placeholder="Search EPC..." className="p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm w-full sm:w-64" value={currentFilterInput} onChange={(e) => setCurrentFilterInput(e.target.value)} />
+                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">{currentFilterInput.length}</span>
+                   </div>
+                   <button onClick={handleSetFilter} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-md">Filter</button>
+                   <button onClick={handleClearFilter} className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition-colors duration-200 shadow-md">Clear</button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 items-start sm:items-end">
+                  <div className="flex items-center">
+                    <div className={`w-4 h-4 rounded-full mr-2 ${getStatusColor()}`}></div>
+                    <span className="text-gray-700 font-medium">Status: {wsStatus}</span>
+                  </div>
+                  <button onClick={handleClearAllData} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 shadow-md">Clear All Tag Data</button>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap justify-center gap-4 w-full max-w-screen-2xl">
+            {Object.keys(antennaData).map((antennaNum) => (
+              <AntennaCard
+                key={antennaNum}
+                antennaNum={parseInt(antennaNum)}
+                tagsData={antennaData[antennaNum].tags}
+                graphData={antennaData[antennaNum].graph}
+                filterEPC={filterEPC}
+                globalMaxReads={globalMaxReads}
+                readHistory={antennaData[antennaNum].readHistory}
+              />
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<App />);
+</script>
+
+</body>
+</html>

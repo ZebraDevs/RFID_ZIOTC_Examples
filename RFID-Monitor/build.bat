@@ -1,0 +1,1 @@
+..\Build-Utils\FX-Package -name RFID-Monitor -maintainer G.Crean -version 1.0.0
