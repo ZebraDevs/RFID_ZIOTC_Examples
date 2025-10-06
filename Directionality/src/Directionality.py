@@ -58,11 +58,12 @@ def passthru_callback(msg_in):
 # New Event Received
 # ************************************************************************
 def new_msg_callback(msg_type, msg_in):
-    if msg_type == pyziotc.MSG_IN_GPI:
-        process_gpi(msg_in)
+	msg_json = json.loads(msg_in)
+	if msg_type == pyziotc.MSG_IN_GPI and msg_json.get("type") == "GPI":
+		process_gpi(msg_in)
 
-    if msg_type == pyziotc.MSG_IN_JSON:
-        process_tag(msg_in)
+	if msg_type == pyziotc.MSG_IN_JSON:
+		process_tag(msg_in)
 
 # ************************************************************************
 # Process GPI Events

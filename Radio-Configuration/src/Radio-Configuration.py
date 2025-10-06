@@ -1,10 +1,12 @@
 import json
+import ssl
 import http.client
 
 class RestAPI:
 
 	def __init__(self):
-		self.conn = http.client.HTTPConnection("127.0.0.1")
+		self.ssl_context = ssl._create_unverified_context()
+		self.conn = http.client.HTTPSConnection("127.0.0.1", context=self.ssl_context)
 		self.invState = False
 		self.retry_count = 3
 
