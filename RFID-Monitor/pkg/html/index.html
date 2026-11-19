@@ -159,14 +159,25 @@
 
     // Main App component
     const App = () => {
+      const [antennaCount,setAntennaCount] = useState(0);
       const [antennaData, setAntennaData] = useState(() => {
         const initialData = {};
-        for (let i = 1; i <= 8; i++) {
+        for (let i = 1; i <= antennaCount; i++) {
           initialData[i] = { tags: new Map(), graph: Array(30).fill(0), readHistory: [] };
         }
         return initialData;
       });
       const [filterEPC, setFilterEPC] = useState('');
+      const [isScanning, setIsScanning] = useState(false);
+      const handleStartStop = async () => {
+        if (isScanning) {
+          const res = await fetch('/cloud/stop', {method:'PUT', body: JSON.stringify({})});
+          setIsScanning(false);
+        } else {
+          const res = await fetch('/cloud/start', {method:'PUT', body: JSON.stringify({doNotPersistState: true})});
+          setIsScanning(true);
+        }
+      };
       const [currentFilterInput, setCurrentFilterInput] = useState('');
       const [wsUrl, setWsUrl] = useState('wss://' + location.host + '/ws'); //change this to start with nothing & show a hint
       const [newWsUrlInput, setNewWsUrlInput] = useState(wsUrl);
@@ -232,7 +243,7 @@
             };
 
             ws.current.onmessage = (event) => {
-	      var text = event.data.toString()
+	          var text = event.data.toString()
               const parsedData = parsePotentiallyConcatenatedJson(text);
               parsedData.forEach(payload => processPayload(payload));
             };
@@ -270,6 +281,40 @@
       }, [wsUrl, processPayload]);
 
       useEffect(() => {
+        // Set the initial reader mode
+        const initMode = async () => {
+          const stop = await fetch('/cloud/stop', {method:'PUT', body: JSON.stringify({})});
+          const mode = {
+              type: 'CUSTOM',
+              tagMetaData: ['ANTENNA', 'RSSI', 'SEEN_COUNT', 'PHASE'],
+              environment: 'AUTO_DETECT',
+              antennaStopCondition: { type: "DURATION", value: 50 },
+              query: { sel: "ALL", session: "S1", tagPopulation: 10, target: "AB" },
+              antennas: [...Array.from({length:antennaCount}, (_, i) => i+1)],
+              transmitPower: 29,
+              reportFilter: { duration: 0, type:'RADIO_WIDE' }
+          }
+          const setMode = await fetch('/cloud/mode', {method:'PUT',  headers: { 'Content-Type': 'application/json' },body: JSON.stringify(mode)});
+        };
+        initMode();
+        handleClearAllData();
+      }, [antennaCount]);
+
+      useEffect(() => {
+        // Fetch reader capabilities
+        const getCapabilities = async () => {
+          const capabilities = await fetch('/cloud/readerCapabilities');
+          const capabilitiesData = await capabilities.json();
+          const list = capabilitiesData?.capabilities?.antennas
+          const ports = list.map((a) => Number(a.port)).filter(Number.isFinite)
+          console.log('Antenna ports:', ports);
+          console.log('Antenna count:', ports.length);
+          setAntennaCount( ports.length );
+        };
+      getCapabilities()
+      },[])
+
+      useEffect(() => {
         const updateGraphData = () => {
           setAntennaData(prevData => {
             const now = Date.now();
@@ -302,7 +347,7 @@
       const handleClearAllData = () => {
         setAntennaData(() => {
           const initialData = {};
-          for (let i = 1; i <= 8; i++) {
+          for (let i = 1; i <= antennaCount; i++) {
             initialData[i] = { tags: new Map(), graph: Array(30).fill(0), readHistory: [] };
           }
           return initialData;
@@ -344,7 +389,13 @@
                     <div className={`w-4 h-4 rounded-full mr-2 ${getStatusColor()}`}></div>
                     <span className="text-gray-700 font-medium">Status: {wsStatus}</span>
                   </div>
-                  <button onClick={handleClearAllData} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 shadow-md">Clear All Tag Data</button>
+
+                <div className="flex flex-col gap-2 items-start sm:items-end">
+                  <div className="flex items-center">
+                    <button onClick={handleStartStop} className={`px-6 py-2 mx-4 ${isScanning ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white rounded-lg transition-colors duration-200 shadow-md`}>{isScanning ? 'Stop' : 'Start'}</button>
+                    <button onClick={handleClearAllData} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 shadow-md">Clear All Tag Data</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
