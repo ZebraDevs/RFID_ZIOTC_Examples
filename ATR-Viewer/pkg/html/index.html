@@ -124,20 +124,20 @@
 
             //Send Stop request
             xmlHttp.open("PUT","/cloud/stop",false)
-            xmlHttp.setRequestHeader('Content-Type',"text/json")
+            xmlHttp.setRequestHeader('Content-Type',"application/json")
             xmlHttp.send('')
 
             // Set Operation Mode
             xmlHttp.open("PUT","/cloud/mode",false)
-            xmlHttp.setRequestHeader('Content-Type',"text/json")
+            xmlHttp.setRequestHeader('Content-Type',"application/json")
             xmlHttp.send(mode)
 
             //Send Start Request
             xmlHttp.open("PUT","/cloud/start",false)
-            xmlHttp.setRequestHeader('Content-Type',"text/json")
+            xmlHttp.setRequestHeader('Content-Type',"application/json")
             xmlHttp.send('{"doNotPersistState":true}')
         }
- 
+
         // Draw to the canvas
         function draw() {
 
@@ -173,7 +173,7 @@
             }
 
             // Fraw update rate is 25 FPS
-            setTimeout(() => { requestAnimationFrame(draw); },1000/25);            
+            setTimeout(() => { requestAnimationFrame(draw); },1000/25);
         }
 
         function drawAzimuth(ctx, angle, x, y, r) {
@@ -196,7 +196,7 @@
         function drawBeam(ctx, angle, x, y, r, beam) {
             let beamX = x + sin(angle)*r
             let beamY = y - cos(angle)*r
-        
+
             ctx.beginPath()
             ctx.arc(beamX, beamY, 5, 0, 2 * Math.PI)
             ctx.fillStyle = 'white'
@@ -205,7 +205,7 @@
                 beams[beam]--;
             }
             ctx.fill()
-        
+
             ctx.font = "700 14px serif"
             ctx.fillStyle = "black"
             ctx.fillText(beam, beamX + 5, beamY - 5)
@@ -238,13 +238,13 @@
         let ws
         function checkWSConnection() {
             if (ws && ws.readyState === WebSocket.OPEN) return
-            
+
             ws = new WebSocket('ws://' + location.host + '/ws')
-            
+
             ws.onopen = (evt) => {
                 console.log('Websocket opened...')
             }
-        
+
             ws.onmessage = (evt) => {
                 text = evt.data.toString()
                 try {
@@ -254,14 +254,14 @@
                     console.log('Error parsing reads: ' + err);
                 }
             }
-            
+
             ws.onerror = (err) => {
                 console.log('Websocket error: ' + err)
             }
 
             ws.onclose = (evt) => {
                 console.log('Websocket closed')
-            } 
+            }
         }
 
         // Handle the websocket data
@@ -272,7 +272,7 @@
                     beams[tag.data.antenna] = 25 * 5
                 }
             }
-        }     
+        }
 
         // Handle broken JSON Strings
         function parsePotentiallyConcatenatedJson(jsonString) {
